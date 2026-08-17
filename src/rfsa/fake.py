@@ -65,6 +65,12 @@ class FakeResource:
         head, _, argument = command.partition(" ")
         if argument:
             self.responses[head + "?"] = argument.strip()
+            if "SWEep:POINts" in head:
+                n = int(float(argument))
+                if n > 0 and n != len(self.trace):
+                    old = np.linspace(0.0, 1.0, len(self.trace))
+                    new = np.linspace(0.0, 1.0, n)
+                    self.trace = np.interp(new, old, self.trace)
 
     def query(self, command: str) -> str:
         self.queries.append(command)
@@ -73,8 +79,9 @@ class FakeResource:
     def query_binary_values(self, command, datatype="d", is_big_endian=False,
                             container=np.array, **_kwargs):
         self.queries.append(command)
+        if command.startswith(":HCOPy:SDUMp:DATA"):
+            return container(_TINY_PNG)
         if command.startswith(":MMEMory:DATA? "):
-            return container(self.files[self._file_arg(command)])
             return container(self.files[self._file_arg(command)])
         return container(self.trace)
 

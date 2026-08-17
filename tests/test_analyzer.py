@@ -188,8 +188,8 @@ class TestScreenCapture:
     def test_save_screen_image_transfers_png(self, analyzer, resource, tmp_path):
         image = analyzer.save_screen_image(tmp_path / "screen.png")
         assert image.read_bytes().startswith(b"\x89PNG")
-        assert ':MMEM:STOR:SCR "D:\\PICTURE.PNG"' in resource.writes
-        assert ':MMEMory:DATA? "D:\\PICTURE.PNG"' in resource.queries
+        assert ":HCOPy:SDUMp:DATA:FTYPe PNG" in resource.writes
+        assert ":HCOPy:SDUMp:DATA?" in resource.queries
 
 
 class TestErrors:

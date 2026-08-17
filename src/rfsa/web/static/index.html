@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>频谱仪 N9020A</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>频谱仪 N9020A</h1>
+    <p id="identity">未连接</p>
+  </header>
+  <p id="banner" hidden></p>
+  <main>
+    <div class="side">
+      <section class="panel">
+        <h2>连接</h2>
+        <label>VISA 地址
+          <input id="address" value="TCPIP0::192.168.10.2::hislip0::INSTR">
+        </label>
+        <div class="row">
+          <button id="connect" type="button">连接</button>
+          <button id="fake" type="button">测试</button>
+          <button id="disconnect" type="button">断开</button>
+        </div>
+
+        <h2>参数</h2>
+        <div class="freq">
+          <label>中心频率
+            <input id="center" type="number" step="any">
+          </label>
+          <select id="center-unit"></select>
+        </div>
+        <div class="freq">
+          <label>Span
+            <input id="span" type="number" step="any">
+          </label>
+          <select id="span-unit"></select>
+        </div>
+        <div class="freq">
+          <label>RBW
+            <input id="rbw" type="number" step="any">
+          </label>
+          <select id="rbw-unit"></select>
+        </div>
+        <div class="freq">
+          <label>VBW
+            <input id="vbw" type="number" step="any">
+          </label>
+          <select id="vbw-unit"></select>
+        </div>
+        <label>点数 <input id="points" type="number" min="1" step="1"></label>
+        <label>扫描时间 (s)，默认自动调整 <input id="sweep-time" type="number" step="any" placeholder="自动"></label>
+        <label>参考电平 (dBm) <input id="ref-level" type="number" step="any"></label>
+        <label>衰减 (dB) <input id="atten" type="number" step="2"></label>
+        <label class="check"><input id="preamp" type="checkbox"> 前置放大器</label>
+        <label>检波器
+          <select id="detector">
+            <option value="RMS">RMS</option>
+            <option value="NORM">Normal</option>
+            <option value="POS">正峰</option>
+            <option value="NEG">负峰</option>
+            <option value="SAMP">采样</option>
+            <option value="AVER">平均</option>
+            <option value="QPE">准峰值</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="apply" type="button">应用参数</button>
+          <button id="scan" class="primary" type="button">扫描</button>
+        </div>
+        <p class="hint">「应用参数」只写入仪器。「扫描」会再自动应用当前表单，然后测频、截图并入库。截图在本机 screenshots/。</p>
+      </section>
+
+      <section class="panel records-panel">
+        <h2>运行记录</h2>
+        <p class="hint">点击即可查看记录的读数与截图。</p>
+        <div id="records"></div>
+      </section>
+    </div>
+
+    <section class="panel screen-panel">
+      <h2>仪器屏幕</h2>
+      <p id="result">尚未扫描</p>
+      <div class="screen-frame">
+        <p id="screen-empty" class="empty">扫描后这里显示仪器截图</p>
+        <img id="screen" alt="仪器截图" hidden>
+      </div>
+    </section>
+  </main>
+  <div id="busy-mask" hidden>
+    <p>扫描中…</p>
+  </div>
+  <div id="popup" hidden>
+    <div class="popup-box">
+      <p id="popup-text"></p>
+      <button id="popup-ok" type="button">确定</button>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

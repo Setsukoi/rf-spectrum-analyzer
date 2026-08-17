@@ -36,6 +36,14 @@ def _yes_no(answer: str) -> bool:
     return answer.upper() in _ON
 
 
+def is_invalid_scpi_value(value: float) -> bool:
+    """Keysight fills 9.91e37 when a query has no data."""
+    try:
+        return abs(float(value)) >= 9.9e37
+    except (TypeError, ValueError):
+        return True
+
+
 def open_visa(address: str, *, timeout_s: float = _DEFAULT_TIMEOUT_S,
               visa_library: str = ""):
     """Open a VISA session."""

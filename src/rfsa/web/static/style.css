@@ -1,0 +1,281 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1a1a1a;
+  background: #ececec;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #1f3b5b;
+  color: #fff;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+#identity {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+#banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: #f8d7da;
+  color: #842029;
+}
+
+#banner.ok {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.75rem;
+  align-items: stretch;
+  min-height: calc(100vh - 3.2rem);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 0.75rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+label {
+  display: block;
+  margin: 0.35rem 0;
+  font-size: 0.82rem;
+}
+
+input, select, button {
+  font: inherit;
+}
+
+label input, label select {
+  width: 100%;
+  margin-top: 0.15rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.freq {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 0.35rem;
+  align-items: end;
+}
+
+.freq label { margin: 0.35rem 0 0; }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.check input { width: auto; }
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.6rem 0;
+}
+
+button {
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #1f3b5b;
+  color: #fff;
+  border: 1px solid #1f3b5b;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: #555;
+  margin: 0.4rem 0 0;
+}
+
+.records-panel {
+  flex: 1;
+  min-height: 14rem;
+  display: flex;
+  flex-direction: column;
+}
+
+#records {
+  flex: 1;
+  overflow: auto;
+  margin-top: 0.5rem;
+  min-height: 0;
+}
+
+.record {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 0.4rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #ddd;
+  background: #f8f8f8;
+}
+
+.record.selected {
+  border-color: #1f3b5b;
+  background: #e8eef5;
+}
+
+.record .time {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.record p {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #333;
+}
+
+.screen-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#result {
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
+}
+
+.screen-frame {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22rem;
+  background: #111;
+  border: 1px solid #333;
+  overflow: hidden;
+}
+
+.screen-frame .empty {
+  color: #9aa;
+  font-size: 0.9rem;
+}
+
+#screen {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 9rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+#screen[hidden] {
+  display: none;
+}
+
+.empty {
+  color: #777;
+  font-size: 0.85rem;
+}
+
+#busy-mask,
+#popup {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+#busy-mask {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+#popup {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+#busy-mask[hidden],
+#popup[hidden] {
+  display: none;
+}
+
+.popup-box {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 1.1rem 1.3rem;
+  min-width: 16rem;
+  max-width: 22rem;
+  text-align: center;
+}
+
+.popup-box p {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .records-panel {
+    min-height: 16rem;
+  }
+
+  #records {
+    max-height: 20rem;
+  }
+
+  .screen-frame {
+    min-height: 16rem;
+  }
+}

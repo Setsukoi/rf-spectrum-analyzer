@@ -29,6 +29,10 @@ class TestSchema:
         columns = {r["name"] for r in db.query("PRAGMA table_info(sweeps)")}
         assert {f.name for f in fields(Settings)} <= columns
 
+    def test_screenshot_path_column_exists(self, db):
+        columns = {r["name"] for r in db.query("PRAGMA table_info(sweeps)")}
+        assert "screenshot_path" in columns
+
     def test_deleting_a_run_removes_its_sweeps(self, db):
         run = db.start_run("temp")
         db.save_sweep(run, make_sweep())
@@ -66,6 +70,11 @@ class TestRoundTrip:
         with pytest.raises(KeyError):
             db.load_sweep(999)
 
+    def test_screenshot_path_is_stored(self, db):
+        run = db.start_run()
+        db.save_sweep(run, make_sweep(), screenshot_path="screenshots/scan.png")
+        assert db.load_sweep_row(1)["screenshot_path"] == "screenshots/scan.png"
+
 
 class TestQuerying:
     def test_peaks_across_a_run(self, db):
@@ -74,6 +83,17 @@ class TestQuerying:
             db.save_sweep(run, make_sweep(label=f"{level} dBm", peak_dbm=level))
         rows = db.peaks(run)
         assert [r["peak_dbm"] for r in rows] == [-20.0, -25.0, -30.0]
+
+    def test_list_sweeps_newest_first(self, db):
+        run = db.start_run("history")
+        first = db.save_sweep(run, make_sweep(label="first", peak_dbm=-10.0))
+        second = db.save_sweep(run, make_sweep(label="second", peak_dbm=-20.0),
+                               counter_hz=1e9 + 3.0, frequency_error_hz=3.0)
+        rows = db.list_sweeps()
+        assert [r["id"] for r in rows] == [second, first]
+        assert rows[0]["label"] == "second"
+        assert rows[0]["counter_hz"] == pytest.approx(1e9 + 3.0)
+        assert rows[0]["title"] == "history"
 
     def test_run_metadata_records_the_instrument(self, db):
         identity = Identity("Agilent Technologies", "N9020A", "MY49010001", "A.14.16")
