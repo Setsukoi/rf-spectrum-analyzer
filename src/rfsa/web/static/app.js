@@ -12,6 +12,7 @@ const els = {
   disconnect: $("disconnect"),
   apply: $("apply"),
   scan: $("scan"),
+  clearHistory: $("clear-history"),
   result: $("result"),
   screen: $("screen"),
   screenEmpty: $("screen-empty"),
@@ -158,7 +159,7 @@ function formPayload() {
 
 function setBusy(on, scanLabel) {
   busy = on;
-  for (const button of [els.connect, els.fake, els.disconnect, els.apply, els.scan]) {
+  for (const button of [els.connect, els.fake, els.disconnect, els.apply, els.scan, els.clearHistory]) {
     button.disabled = on;
   }
   els.scan.textContent = on && scanLabel ? scanLabel : "扫描";
@@ -306,6 +307,17 @@ els.apply.addEventListener("click", () => withBusy(async () => {
 
 els.popupOk.addEventListener("click", () => {
   els.popup.hidden = true;
+});
+
+els.clearHistory.addEventListener("click", () => {
+  if (!window.confirm("清空全部扫描记录和截图？此操作不能恢复。")) return;
+  withBusy(async () => {
+    await api("/api/history/clear", { method: "POST", body: "{}" });
+    selectedId = null;
+    showResult(null);
+    await refreshRecords();
+    showBanner("历史已清空", true);
+  });
 });
 
 els.scan.addEventListener("click", () => withBusy(async () => {

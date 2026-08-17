@@ -127,3 +127,19 @@ def test_scan_saves_when_screenshot_fails(tmp_path, monkeypatch):
         listing = client.get("/api/sweeps").json()
         assert len(listing) == 1
         assert listing[0]["has_screenshot"] is False
+
+
+def test_clear_history_empties_listing_and_files(tmp_path):
+    with TestClient(make_app(tmp_path)) as client:
+        client.post("/api/connect", json={"fake": True})
+        scanned = client.post("/api/scan", json={
+            "center_hz": 1e9,
+            "span_hz": 10e6,
+            "points": 1001,
+        })
+        shot = Path(scanned.json()["screenshot_path"])
+        assert shot.is_file()
+        cleared = client.post("/api/history/clear")
+        assert cleared.status_code == 200
+        assert client.get("/api/sweeps").json() == []
+        assert not shot.is_file()

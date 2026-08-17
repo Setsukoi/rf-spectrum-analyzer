@@ -95,6 +95,13 @@ class TestQuerying:
         assert rows[0]["counter_hz"] == pytest.approx(1e9 + 3.0)
         assert rows[0]["title"] == "history"
 
+    def test_clear_history_removes_runs_and_sweeps(self, db):
+        run = db.start_run("keep nothing")
+        db.save_sweep(run, make_sweep(), screenshot_path="screenshots/gone.png")
+        assert db.clear_history() == ["screenshots/gone.png"]
+        assert db.query("SELECT * FROM runs") == []
+        assert db.query("SELECT * FROM sweeps") == []
+
     def test_run_metadata_records_the_instrument(self, db):
         identity = Identity("Agilent Technologies", "N9020A", "MY49010001", "A.14.16")
         run = db.start_run("frequency check", identity=identity, operator="setsukoi")

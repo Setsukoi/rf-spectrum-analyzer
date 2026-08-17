@@ -154,6 +154,27 @@ class Lab:
             raise FileNotFoundError(f"截图文件已丢失：{path}")
         return path
 
+    def clear_history(self) -> dict[str, Any]:
+        with self._lock:
+            paths = self.db.clear_history()
+            for stored in paths:
+                try:
+                    Path(stored).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if self.screenshot_dir.is_dir():
+                for image in self.screenshot_dir.glob("scan_*.png"):
+                    try:
+                        image.unlink()
+                    except OSError:
+                        pass
+            if self.sa is not None:
+                self.run_id = self.db.start_run(
+                    "网页测量", identity=self.sa.identity)
+            else:
+                self.run_id = None
+            return {"cleared": True, "run_id": self.run_id}
+
 
 def _identity_json(identity: Identity) -> dict[str, str]:
     return {

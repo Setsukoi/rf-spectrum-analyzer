@@ -116,6 +116,17 @@ class Storage:
                                     (utcnow().isoformat(), run_id))
             self.connection.commit()
 
+    def clear_history(self) -> list[str]:
+        """Delete every run and sweep. Returns screenshot paths that were stored."""
+        rows = self.query(
+            "SELECT screenshot_path FROM sweeps WHERE screenshot_path IS NOT NULL")
+        paths = [row["screenshot_path"] for row in rows if row["screenshot_path"]]
+        with self._lock:
+            self.connection.execute("DELETE FROM sweeps")
+            self.connection.execute("DELETE FROM runs")
+            self.connection.commit()
+        return paths
+
     def save_sweep(self, run_id: int, sweep: Sweep, *,
                    counter_hz: float | None = None,
                    frequency_error_hz: float | None = None,

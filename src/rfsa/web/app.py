@@ -148,6 +148,10 @@ def create_app(db_path: str = "measurements.db", *,
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return FileResponse(path, media_type="image/png")
 
+    @app.post("/api/history/clear")
+    def clear_history() -> dict[str, Any]:
+        return lab().clear_history()
+
     return app
 
 
