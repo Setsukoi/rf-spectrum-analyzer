@@ -33,7 +33,9 @@ class TestSession:
         assert ":FORMat:BORDer SWAP" in resource.writes
 
     def test_close_closes_the_resource(self, resource):
-        N9020A(resource).close()
+        analyzer = N9020A(resource)
+        analyzer.close()
+        assert ":INITiate:CONTinuous 1" in resource.writes
         assert resource.closed
 
     def test_the_transfer_format_is_read_not_assumed(self, resource):
@@ -137,6 +139,11 @@ class TestSweep:
         analyzer.single_sweep()
         assert resource.writes == [":INITiate:CONTinuous 0", ":INITiate:IMMediate"]
         assert "*OPC?" in resource.queries
+
+    def test_continuous_sweep_turns_free_run_back_on(self, analyzer, resource):
+        resource.writes.clear()
+        analyzer.continuous_sweep()
+        assert resource.writes == [":INITiate:CONTinuous 1"]
 
     def test_detector_is_checked(self, analyzer):
         analyzer.detector = "RMS"
@@ -243,17 +250,27 @@ class TestScreenCapture:
     def test_save_screen_image_transfers_png(self, analyzer, resource, tmp_path):
         image = analyzer.save_screen_image(tmp_path / "screen.png")
         assert image.read_bytes().startswith(b"\x89PNG")
-        assert ":HCOPy:SDUMp:DATA:FTYPe PNG" in resource.writes
-        assert ":HCOPy:SDUMp:DATA?" in resource.queries
+        quoted = r'"D:\rfsa_screen.png"'
+        assert f":MMEM:STOR:SCR {quoted}" in resource.writes
+        assert f":MMEM:DATA? {quoted}" in resource.queries
+        assert f":MMEM:DEL {quoted}" in resource.writes
+        assert resource.files == {}
 
     def test_screenshot_read_disables_termination_and_restores_the_timeout(
             self, analyzer, resource, tmp_path):
         analyzer.save_screen_image(tmp_path / "screen.png")
         read = resource.binary_reads[-1]
+        assert read["command"].startswith(":MMEM:DATA?")
         assert read["read_termination"] is None
         assert read["timeout"] == 30000, "screenshots need a longer timeout"
         assert resource.read_termination == "\n"
         assert resource.timeout == 10000
+
+    def test_stale_error_queue_is_drained_before_capture(
+            self, analyzer, resource, tmp_path):
+        resource.error_queue = ['-113,"Undefined header"', '+0,"No error"']
+        image = analyzer.save_screen_image(tmp_path / "screen.png")
+        assert image.read_bytes().startswith(b"\x89PNG")
 
 
 class TestErrors:

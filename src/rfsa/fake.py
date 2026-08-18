@@ -60,10 +60,11 @@ class FakeResource:
 
     def write(self, command: str) -> None:
         self.writes.append(command)
-        if command.startswith(":MMEM:STOR:SCR "):
+        if command.startswith(":MMEM:STOR:SCR ") or command.startswith(
+                ":MMEMory:STORe:SCReen "):
             self.files[self._file_arg(command)] = _TINY_PNG
             return
-        if command.startswith(":MMEMory:DELete "):
+        if command.startswith(":MMEM:DEL ") or command.startswith(":MMEMory:DELete "):
             self.files.pop(self._file_arg(command), None)
             return
         head, _, argument = command.partition(" ")
@@ -89,7 +90,7 @@ class FakeResource:
                                   "timeout": self.timeout})
         if command.startswith(":HCOPy:SDUMp:DATA"):
             return container(_TINY_PNG)
-        if command.startswith(":MMEMory:DATA? "):
+        if command.startswith(":MMEM:DATA?") or command.startswith(":MMEMory:DATA?"):
             return container(self.files[self._file_arg(command)])
         return container(self.trace)
 

@@ -129,6 +129,26 @@ def test_scan_saves_when_screenshot_fails(tmp_path, monkeypatch):
         assert listing[0]["has_screenshot"] is False
 
 
+def test_scan_resumes_continuous_sweep_after_screenshot(tmp_path):
+    from rfsa.analyzer import N9020A
+    from rfsa.fake import FakeResource, tone_trace
+    from rfsa.web.session import Lab
+
+    resource = FakeResource(trace=tone_trace(peak_dbm=-20.4))
+    lab = Lab(str(tmp_path / "m.db"), screenshot_dir=tmp_path / "screenshots")
+    try:
+        lab.sa = N9020A(resource)
+        lab.fake = True
+        lab.scan()
+        off = resource.writes.index(":INITiate:CONTinuous 0")
+        store = next(i for i, cmd in enumerate(resource.writes)
+                     if cmd.startswith(":MMEM:STOR:SCR"))
+        on = resource.writes.index(":INITiate:CONTinuous 1")
+        assert off < store < on
+    finally:
+        lab.close()
+
+
 def test_scan_saves_when_the_frequency_counter_has_nothing_to_count(tmp_path):
     """A silent tone must not cost us the sweep, nor store 9.91e37 as a result."""
     with TestClient(make_app(tmp_path)) as client:

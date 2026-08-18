@@ -106,41 +106,47 @@ class Lab:
                       if key in fields and fields[key] is not None}
             if kwargs:
                 sa.configure(**kwargs)
-            sweep = sa.capture()
-            peak = sa.peak_search()
-            # A silent tone gives the counter nothing to count. That is worth
-            # recording as "unknown", not worth throwing the sweep away over.
-            counter_hz = None
-            error_hz = None
-            counter_error = None
             try:
-                counter_hz = sa.marker_frequency_counter().value
-                error_hz = counter_hz - sweep.settings.center_hz
-            except RfsaError as exc:
-                counter_error = str(exc)
-            sweep = Sweep(
-                amplitudes_dbm=sweep.amplitudes_dbm,
-                settings=sweep.settings,
-                trace=sweep.trace,
-                captured_at=sweep.captured_at,
-                label=label or f"{sweep.settings.center_hz / 1e6:.3f} MHz")
-            screenshot_path = None
-            screenshot_error = None
-            try:
-                image = sa.save_screen_image(self._screenshot_path())
-                screenshot_path = str(image.resolve())
-            except Exception as exc:
-                screenshot_error = str(exc)
-            sweep_id = self.db.save_sweep(
-                self.run_id, sweep,
-                peak_hz=peak.frequency_hz, peak_dbm=peak.value,
-                counter_hz=counter_hz, frequency_error_hz=error_hz,
-                screenshot_path=screenshot_path)
-            payload = _sweep_payload(sweep_id, sweep, self.db.load_sweep_row(sweep_id))
-            payload["applied"] = bool(kwargs)
-            payload["screenshot_error"] = screenshot_error
-            payload["counter_error"] = counter_error
-            return payload
+                sweep = sa.capture()
+                peak = sa.peak_search()
+                # A silent tone gives the counter nothing to count. That is worth
+                # recording as "unknown", not worth throwing the sweep away over.
+                counter_hz = None
+                error_hz = None
+                counter_error = None
+                try:
+                    counter_hz = sa.marker_frequency_counter().value
+                    error_hz = counter_hz - sweep.settings.center_hz
+                except RfsaError as exc:
+                    counter_error = str(exc)
+                sweep = Sweep(
+                    amplitudes_dbm=sweep.amplitudes_dbm,
+                    settings=sweep.settings,
+                    trace=sweep.trace,
+                    captured_at=sweep.captured_at,
+                    label=label or f"{sweep.settings.center_hz / 1e6:.3f} MHz")
+                screenshot_path = None
+                screenshot_error = None
+                try:
+                    image = sa.save_screen_image(self._screenshot_path())
+                    screenshot_path = str(image.resolve())
+                except Exception as exc:
+                    screenshot_error = str(exc)
+                sweep_id = self.db.save_sweep(
+                    self.run_id, sweep,
+                    peak_hz=peak.frequency_hz, peak_dbm=peak.value,
+                    counter_hz=counter_hz, frequency_error_hz=error_hz,
+                    screenshot_path=screenshot_path)
+                payload = _sweep_payload(sweep_id, sweep, self.db.load_sweep_row(sweep_id))
+                payload["applied"] = bool(kwargs)
+                payload["screenshot_error"] = screenshot_error
+                payload["counter_error"] = counter_error
+                return payload
+            finally:
+                try:
+                    sa.continuous_sweep()
+                except Exception:
+                    pass
 
     def _screenshot_path(self) -> Path:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")

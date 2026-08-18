@@ -14,6 +14,7 @@ from .models import DETECTORS, Identity, Reading, Settings, Sweep, utcnow
 _ERROR_RE = re.compile(r'^\s*([+-]?\d+)\s*,\s*"?(.*?)"?\s*$')
 _DEFAULT_TIMEOUT_S = 10.0
 _SCREENSHOT_TIMEOUT_S = 30.0
+_SCREENSHOT_REMOTE = r"D:\rfsa_screen.png"
 _MAX_ERROR_DRAIN = 20
 
 _ON = ("1", "ON", "TRUE")
@@ -172,6 +173,10 @@ class N9020A:
         self._byte_order = self._read_byte_order()
 
     def close(self) -> None:
+        try:
+            self.continuous_sweep()
+        except Exception:
+            pass
         self._res.close()
 
     def __enter__(self) -> "N9020A":
@@ -365,6 +370,10 @@ class N9020A:
         self.opc(timeout_s=timeout_s)
         self.check_errors(":INITiate:IMMediate")
 
+    def continuous_sweep(self) -> None:
+        """Free-run again so the front panel does not stay frozen."""
+        self.write_bool(":INITiate:CONTinuous", True)
+
     def settings(self) -> Settings:
         parsed = {}
         for name, query, parse in _SETTINGS_QUERIES:
@@ -440,14 +449,23 @@ class N9020A:
     def save_screen_image(self, path: str | Path) -> Path:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        self.write(":HCOPy:SDUMp:DATA:FTYPe PNG")
-        with self._binary_read(timeout_s=_SCREENSHOT_TIMEOUT_S):
-            data = self._res.query_binary_values(
-                ":HCOPy:SDUMp:DATA?", datatype="B", is_big_endian=False,
-                container=bytearray, header_fmt="ieee",
-                expect_termination=False)
-        output.write_bytes(bytes(data))
-        self.check_errors(":HCOPy:SDUMp:DATA?")
+        quoted = f'"{_SCREENSHOT_REMOTE}"'
+        self.errors()
+        self.write(f":MMEM:STOR:SCR {quoted}")
+        self.opc(timeout_s=_SCREENSHOT_TIMEOUT_S)
+        try:
+            self.check_errors(":MMEM:STOR:SCR")
+            with self._binary_read(timeout_s=_SCREENSHOT_TIMEOUT_S):
+                data = self._res.query_binary_values(
+                    f":MMEM:DATA? {quoted}", datatype="B", is_big_endian=False,
+                    container=bytearray, header_fmt="ieee",
+                    expect_termination=False)
+        finally:
+            self.write(f":MMEM:DEL {quoted}")
+        payload = bytes(data)
+        if not payload.startswith(b"\x89PNG"):
+            raise InstrumentError("screenshot transfer did not return a PNG")
+        output.write_bytes(payload)
         return output
 
     def configure(self, *, center_hz: float | None = None,
