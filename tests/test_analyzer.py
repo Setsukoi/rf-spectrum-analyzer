@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from rfsa import Identity, Limits, N9020A, ParameterError, ScpiError
+from rfsa import (Identity, InstrumentError, Limits, N9020A, ParameterError,
+                  ScpiError)
 from rfsa.analyzer import is_invalid_scpi_value
 from rfsa.fake import FakeResource
 
@@ -38,6 +39,16 @@ class TestSession:
     def test_the_transfer_format_is_read_not_assumed(self, resource):
         resource.responses[":FORMat:DATA?"] = "ASC,8"
         assert N9020A(resource).data_format == "ASC"
+
+    def test_the_byte_order_is_read_not_assumed(self, resource):
+        resource.responses[":FORMat:BORDer?"] = "NORM"
+        assert N9020A(resource).byte_order == "NORM"
+
+    def test_prepare_records_the_byte_order_it_selected(self, resource):
+        resource.responses[":FORMat:BORDer?"] = "NORM"
+        analyzer = N9020A(resource)
+        analyzer.prepare()
+        assert analyzer.byte_order == "SWAP"
 
 
 class TestLimits:
@@ -79,6 +90,18 @@ class TestFrequency:
         analyzer.span_hz = 0
         with pytest.raises(ParameterError, match="span"):
             analyzer.span_hz = 1.0
+
+    def test_a_window_reaching_past_the_top_of_the_band_is_refused(self, analyzer,
+                                                                  resource):
+        """26.4 GHz and 1 GHz are each legal; together they ask for 26.9 GHz."""
+        before = len(resource.writes)
+        with pytest.raises(ParameterError, match="above the"):
+            analyzer.set_frequency(26.4e9, 1e9)
+        assert len(resource.writes) == before
+
+    def test_a_window_inside_the_band_is_accepted(self, analyzer):
+        analyzer.set_frequency(26.0e9, 1e9)
+        assert analyzer.center_hz == pytest.approx(26.0e9)
 
 
 class TestBandwidthAndAmplitude:
@@ -140,6 +163,28 @@ class TestData:
         with pytest.raises(Exception, match="500 points"):
             analyzer.read_trace()
 
+    def test_binary_trace_read_disables_the_termination_character(self, analyzer,
+                                                                  resource):
+        analyzer.read_trace()
+        assert resource.binary_reads[-1]["read_termination"] is None
+        assert resource.read_termination == "\n", "must be restored afterwards"
+
+    @pytest.mark.parametrize("border, big_endian",
+                             [("SWAP", False), ("NORM", True)])
+    def test_binary_trace_read_follows_the_instrument_byte_order(
+            self, resource, border, big_endian):
+        resource.responses[":FORMat:BORDer?"] = border
+        N9020A(resource).read_trace()
+        assert resource.binary_reads[-1]["is_big_endian"] is big_endian
+
+    def test_an_ascii_trace_is_parsed(self, resource):
+        resource.responses[":FORMat:DATA?"] = "ASC,8"
+        resource.trace = np.linspace(-90.0, -80.0, 1001)
+        sweep = N9020A(resource).read_trace()
+        assert len(sweep) == 1001
+        assert sweep.amplitudes_dbm[0] == pytest.approx(-90.0)
+        assert sweep.amplitudes_dbm[-1] == pytest.approx(-80.0)
+
     def test_peak_of_a_captured_sweep(self, resource):
         resource.trace = np.full(1001, -95.0)
         resource.trace[500] = -20.0
@@ -177,6 +222,16 @@ class TestMarkers:
         assert is_invalid_scpi_value(9.91e37)
         assert not is_invalid_scpi_value(1e9)
 
+    def test_an_uncountable_signal_is_refused_not_returned(self, analyzer, resource):
+        resource.responses[":CALCulate:MARKer1:FCOunt:X?"] = "9.91e37"
+        with pytest.raises(InstrumentError, match="9.91e37"):
+            analyzer.marker_frequency_counter()
+
+    def test_a_marker_with_no_data_is_refused(self, analyzer, resource):
+        resource.responses[":CALCulate:MARKer1:Y?"] = "9.91e37"
+        with pytest.raises(InstrumentError, match="9.91e37"):
+            analyzer.peak_search()
+
     def test_peak_frequency_searches_before_counter(self, analyzer, resource):
         analyzer.peak_frequency()
         peak = resource.writes.index(":CALCulate:MARKer1:MAXimum")
@@ -190,6 +245,15 @@ class TestScreenCapture:
         assert image.read_bytes().startswith(b"\x89PNG")
         assert ":HCOPy:SDUMp:DATA:FTYPe PNG" in resource.writes
         assert ":HCOPy:SDUMp:DATA?" in resource.queries
+
+    def test_screenshot_read_disables_termination_and_restores_the_timeout(
+            self, analyzer, resource, tmp_path):
+        analyzer.save_screen_image(tmp_path / "screen.png")
+        read = resource.binary_reads[-1]
+        assert read["read_termination"] is None
+        assert read["timeout"] == 30000, "screenshots need a longer timeout"
+        assert resource.read_termination == "\n"
+        assert resource.timeout == 10000
 
 
 class TestErrors:

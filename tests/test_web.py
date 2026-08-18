@@ -129,6 +129,23 @@ def test_scan_saves_when_screenshot_fails(tmp_path, monkeypatch):
         assert listing[0]["has_screenshot"] is False
 
 
+def test_scan_saves_when_the_frequency_counter_has_nothing_to_count(tmp_path):
+    """A silent tone must not cost us the sweep, nor store 9.91e37 as a result."""
+    with TestClient(make_app(tmp_path)) as client:
+        client.post("/api/connect", json={"fake": True})
+        lab = client.app.state.lab
+        lab.sa._res.responses[":CALCulate:MARKer1:FCOunt:X?"] = "9.91e37"
+
+        scanned = client.post("/api/scan", json={"center_hz": 1e9, "span_hz": 10e6})
+        assert scanned.status_code == 200
+        body = scanned.json()
+        assert body["counter_hz"] is None
+        assert body["frequency_error_hz"] is None
+        assert "9.91e37" in body["counter_error"]
+        assert body["peak_dbm"] == -20.5, "the sweep itself is still recorded"
+        assert len(client.get("/api/sweeps").json()) == 1
+
+
 def test_clear_history_empties_listing_and_files(tmp_path):
     with TestClient(make_app(tmp_path)) as client:
         client.post("/api/connect", json={"fake": True})

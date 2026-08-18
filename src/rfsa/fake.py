@@ -15,6 +15,7 @@ DEFAULTS = {
     "*OPC?": "1",
     ":SYSTem:ERRor?": '+0,"No error"',
     ":FORMat:DATA?": "REAL,64",
+    ":FORMat:BORDer?": "SWAP",
     ":SENSe:FREQuency:CENTer?": "13250000000",
     ":SENSe:FREQuency:SPAN?": "26500000000",
     ":SENSe:BANDwidth:RESolution?": "3000000",
@@ -51,7 +52,10 @@ class FakeResource:
         self.error_queue = list(errors or [])
         self.writes: list[str] = []
         self.queries: list[str] = []
+        self.binary_reads: list[dict] = []
         self.timeout = 10000
+        self.read_termination = "\n"
+        self.write_termination = "\n"
         self.closed = False
 
     def write(self, command: str) -> None:
@@ -79,6 +83,10 @@ class FakeResource:
     def query_binary_values(self, command, datatype="d", is_big_endian=False,
                             container=np.array, **_kwargs):
         self.queries.append(command)
+        self.binary_reads.append({"command": command, "datatype": datatype,
+                                  "is_big_endian": is_big_endian,
+                                  "read_termination": self.read_termination,
+                                  "timeout": self.timeout})
         if command.startswith(":HCOPy:SDUMp:DATA"):
             return container(_TINY_PNG)
         if command.startswith(":MMEMory:DATA? "):
@@ -92,6 +100,8 @@ class FakeResource:
         command = command.strip()
         if command == ":SYSTem:ERRor?":
             return self.error_queue.pop(0) if self.error_queue else '+0,"No error"'
+        if command.startswith(":TRACe:DATA?"):
+            return ",".join(f"{value:.6f}" for value in self.trace)
         if command in self.responses:
             return self.responses[command]
         raise KeyError(f"FakeResource has no answer for {command!r}")

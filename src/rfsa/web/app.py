@@ -87,10 +87,6 @@ def create_app(db_path: str = "measurements.db", *,
     async def rfsa_error(_request: Request, exc: RfsaError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
-    @app.exception_handler(KeyError)
-    async def missing(_request: Request, exc: KeyError) -> JSONResponse:
-        return JSONResponse({"detail": str(exc).strip("'")}, status_code=404)
-
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")

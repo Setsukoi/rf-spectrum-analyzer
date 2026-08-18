@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,7 @@ from .models import DETECTORS, Identity, Reading, Settings, Sweep, utcnow
 
 _ERROR_RE = re.compile(r'^\s*([+-]?\d+)\s*,\s*"?(.*?)"?\s*$')
 _DEFAULT_TIMEOUT_S = 10.0
+_SCREENSHOT_TIMEOUT_S = 30.0
 _MAX_ERROR_DRAIN = 20
 
 _ON = ("1", "ON", "TRUE")
@@ -83,6 +85,7 @@ class N9020A:
                 f"expected an N9020A, found {self.identity.model!r}")
         self.limits = limits or Limits()
         self._data_format = self._read_data_format()
+        self._byte_order = self._read_byte_order()
         if prepare:
             self.prepare()
 
@@ -92,9 +95,22 @@ class N9020A:
             return "ASC"
         return "REAL,64" if fmt.endswith("64") else "REAL,32"
 
+    def _read_byte_order(self) -> str:
+        """``SWAP`` is little-endian, ``NORM`` big-endian.
+
+        Guessing here is worse than failing: the wrong order turns every
+        amplitude into a plausible-looking number, with nothing to catch it.
+        """
+        return "SWAP" if self.query(":FORMat:BORDer?").upper().startswith("SWAP") \
+            else "NORM"
+
     @property
     def data_format(self) -> str:
         return self._data_format
+
+    @property
+    def byte_order(self) -> str:
+        return self._byte_order
 
     def write(self, command: str) -> None:
         self._res.write(command)
@@ -145,6 +161,7 @@ class N9020A:
         self.write(":FORMat:DATA REAL,64")
         self._data_format = "REAL,64"
         self.write(":FORMat:BORDer SWAP")
+        self._byte_order = "SWAP"
         self.check_errors()
 
     def preset(self) -> None:
@@ -152,6 +169,7 @@ class N9020A:
         self.write("*RST")
         self.opc(timeout_s=30.0)
         self._data_format = self._read_data_format()
+        self._byte_order = self._read_byte_order()
 
     def close(self) -> None:
         self._res.close()
@@ -183,6 +201,32 @@ class N9020A:
             raise ParameterError(f"{name} must be a whole number, got {value!r}")
         return int(number)
 
+    def _require_data(self, value: float, what: str) -> float:
+        if is_invalid_scpi_value(value):
+            raise InstrumentError(
+                f"{what}: the analyzer answered 9.91e37, its code for 'no data'")
+        return value
+
+    @contextmanager
+    def _binary_read(self, timeout_s: float | None = None):
+        """Read raw bytes with the termination character disabled.
+
+        Any byte of a REAL,64 sample or a PNG can equal 0x0A, the newline the
+        text replies end with. Leaving it enabled truncates the transfer part
+        way through, so the reply has to be delimited by its length header
+        alone.
+        """
+        previous_term = getattr(self._res, "read_termination", "\n")
+        previous_timeout = self._res.timeout
+        self._res.read_termination = None
+        if timeout_s is not None:
+            self._res.timeout = int(timeout_s * 1000)
+        try:
+            yield
+        finally:
+            self._res.read_termination = previous_term
+            self._res.timeout = previous_timeout
+
     @property
     def center_hz(self) -> float:
         return self.query_float(":SENSe:FREQuency:CENTer?")
@@ -207,8 +251,26 @@ class N9020A:
 
     def set_frequency(self, center_hz: float, span_hz: float) -> None:
         """Set centre and span. Span goes first to avoid band-edge coupling."""
+        self._check_window(center_hz, span_hz)
         self.span_hz = span_hz
         self.center_hz = center_hz
+
+    def _check_window(self, center_hz: float, span_hz: float) -> None:
+        """Refuse a centre/span pair whose upper edge is off the instrument.
+
+        Both numbers can be legal alone while the window they describe is not.
+        The analyzer clips such a request and sweeps a different band without
+        reporting anything.
+        """
+        try:
+            stop_hz = float(center_hz) + float(span_hz) / 2
+        except (TypeError, ValueError):
+            return  # the individual setters report what is wrong with the value
+        if stop_hz > self.limits.freq_max_hz:
+            raise ParameterError(
+                f"center {float(center_hz):g} Hz with span {float(span_hz):g} Hz "
+                f"ends at {stop_hz:g} Hz, above the "
+                f"{self.limits.freq_max_hz:g} Hz limit")
 
     @property
     def rbw_hz(self) -> float:
@@ -315,9 +377,11 @@ class N9020A:
         if self._data_format == "ASC":
             amplitudes = np.array([float(v) for v in self.query(command).split(",")])
         else:
-            amplitudes = np.asarray(self._res.query_binary_values(
-                command, datatype="d" if self._data_format == "REAL,64" else "f",
-                is_big_endian=False, container=np.array), dtype=float)
+            with self._binary_read():
+                amplitudes = np.asarray(self._res.query_binary_values(
+                    command, datatype="d" if self._data_format == "REAL,64" else "f",
+                    is_big_endian=self._byte_order == "NORM", container=np.array),
+                    dtype=float)
         settings = self.settings()
         if len(amplitudes) != settings.points:
             raise InstrumentError(
@@ -333,8 +397,10 @@ class N9020A:
     def peak_search(self, marker: int = 1) -> Reading:
         marker = self._check_marker(marker)
         self.write(f":CALCulate:MARKer{marker}:MAXimum")
-        x = float(self.query(f":CALCulate:MARKer{marker}:X?"))
-        y = float(self.query(f":CALCulate:MARKer{marker}:Y?"))
+        x = self._require_data(float(self.query(f":CALCulate:MARKer{marker}:X?")),
+                               f"marker {marker} frequency")
+        y = self._require_data(float(self.query(f":CALCulate:MARKer{marker}:Y?")),
+                               f"marker {marker} amplitude")
         return Reading("peak", y, "dBm", x)
 
     def marker_at(self, frequency_hz: float, marker: int = 1) -> Reading:
@@ -346,7 +412,8 @@ class N9020A:
         self.write_bool(f":CALCulate:MARKer{marker}:STATe", True)
         self.write(f":CALCulate:MARKer{marker}:X {requested_hz:.3f}")
         x = float(self.query(f":CALCulate:MARKer{marker}:X?"))
-        y = float(self.query(f":CALCulate:MARKer{marker}:Y?"))
+        y = self._require_data(float(self.query(f":CALCulate:MARKer{marker}:Y?")),
+                               f"marker {marker} amplitude")
         return Reading.at_frequency(requested_hz, y, frequency_hz=x)
 
     def marker_frequency_counter(self, marker: int = 1, *,
@@ -361,7 +428,9 @@ class N9020A:
         self.write_bool(f":CALCulate:MARKer{marker}:FCOunt:STATe", True)
         self.write(f":CALCulate:MARKer{marker}:FCOunt:PRECision "
                    f"{_FCOUNT_PRECISIONS[precision_key]}")
-        frequency_hz = float(self.query(f":CALCulate:MARKer{marker}:FCOunt:X?"))
+        frequency_hz = self._require_data(
+            float(self.query(f":CALCulate:MARKer{marker}:FCOunt:X?")),
+            f"marker {marker} frequency counter (no countable signal?)")
         return Reading("frequency counter", frequency_hz, "Hz", frequency_hz)
 
     def peak_frequency(self, marker: int = 1, *, precision: str = "FINE") -> Reading:
@@ -372,18 +441,11 @@ class N9020A:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
         self.write(":HCOPy:SDUMp:DATA:FTYPe PNG")
-        previous_term = getattr(self._res, "read_termination", "\n")
-        previous_timeout = self._res.timeout
-        self._res.read_termination = None
-        self._res.timeout = 30000
-        try:
+        with self._binary_read(timeout_s=_SCREENSHOT_TIMEOUT_S):
             data = self._res.query_binary_values(
                 ":HCOPy:SDUMp:DATA?", datatype="B", is_big_endian=False,
                 container=bytearray, header_fmt="ieee",
                 expect_termination=False)
-        finally:
-            self._res.read_termination = previous_term
-            self._res.timeout = previous_timeout
         output.write_bytes(bytes(data))
         self.check_errors(":HCOPy:SDUMp:DATA?")
         return output
