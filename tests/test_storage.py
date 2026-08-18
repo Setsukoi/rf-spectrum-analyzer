@@ -1,6 +1,7 @@
 """Storage tests."""
 
 from dataclasses import fields
+import sqlite3
 
 import numpy as np
 import pytest
@@ -33,8 +34,13 @@ class TestSchema:
         columns = {r["name"] for r in db.query("PRAGMA table_info(sweeps)")}
         assert "screenshot_path" in columns
 
+    def test_runs_table_has_no_title_or_operator(self, db):
+        columns = {r["name"] for r in db.query("PRAGMA table_info(runs)")}
+        assert "title" not in columns
+        assert "operator" not in columns
+
     def test_deleting_a_run_removes_its_sweeps(self, db):
-        run = db.start_run("temp")
+        run = db.start_run()
         db.save_sweep(run, make_sweep())
         db.connection.execute("DELETE FROM runs WHERE id = ?", (run,))
         db.connection.commit()
@@ -43,7 +49,7 @@ class TestSchema:
 
 class TestRoundTrip:
     def test_a_sweep_comes_back_bit_for_bit(self, db):
-        run = db.start_run("round trip")
+        run = db.start_run()
         original = make_sweep()
         loaded = db.load_sweep(db.save_sweep(run, original))
         assert np.array_equal(loaded.amplitudes_dbm, original.amplitudes_dbm)
@@ -78,14 +84,14 @@ class TestRoundTrip:
 
 class TestQuerying:
     def test_peaks_across_a_run(self, db):
-        run = db.start_run("sweep over level")
+        run = db.start_run()
         for level in (-20.0, -25.0, -30.0):
             db.save_sweep(run, make_sweep(label=f"{level} dBm", peak_dbm=level))
         rows = db.peaks(run)
         assert [r["peak_dbm"] for r in rows] == [-20.0, -25.0, -30.0]
 
     def test_list_sweeps_newest_first(self, db):
-        run = db.start_run("history")
+        run = db.start_run()
         first = db.save_sweep(run, make_sweep(label="first", peak_dbm=-10.0))
         second = db.save_sweep(run, make_sweep(label="second", peak_dbm=-20.0),
                                counter_hz=1e9 + 3.0, frequency_error_hz=3.0)
@@ -93,10 +99,11 @@ class TestQuerying:
         assert [r["id"] for r in rows] == [second, first]
         assert rows[0]["label"] == "second"
         assert rows[0]["counter_hz"] == pytest.approx(1e9 + 3.0)
-        assert rows[0]["title"] == "history"
+        assert "title" not in rows[0].keys()
+        assert "operator" not in rows[0].keys()
 
     def test_clear_history_removes_runs_and_sweeps(self, db):
-        run = db.start_run("keep nothing")
+        run = db.start_run()
         db.save_sweep(run, make_sweep(), screenshot_path="screenshots/gone.png")
         assert db.clear_history() == ["screenshots/gone.png"]
         assert db.query("SELECT * FROM runs") == []
@@ -104,11 +111,13 @@ class TestQuerying:
 
     def test_run_metadata_records_the_instrument(self, db):
         identity = Identity("Agilent Technologies", "N9020A", "MY49010001", "A.14.16")
-        run = db.start_run("frequency check", identity=identity, operator="setsukoi")
+        run = db.start_run(identity=identity)
         db.finish_run(run)
         row = db.query("SELECT * FROM runs WHERE id = ?", (run,))[0]
-        assert (row["model"], row["serial"], row["operator"]) == \
-            ("N9020A", "MY49010001", "setsukoi")
+        assert (row["model"], row["serial"], row["firmware"]) == \
+            ("N9020A", "MY49010001", "A.14.16")
+        assert "title" not in row.keys()
+        assert "operator" not in row.keys()
 
 
 def test_capture_to_database_end_to_end(db):
@@ -117,9 +126,37 @@ def test_capture_to_database_end_to_end(db):
     resource.trace[500] = -20.0
     analyzer = N9020A(resource)
 
-    run = db.start_run("end to end", identity=analyzer.identity)
+    run = db.start_run(identity=analyzer.identity)
     sweep = analyzer.capture(label="1 GHz tone")
     sweep_id = db.save_sweep(run, sweep)
     db.finish_run(run)
 
     assert db.load_sweep(sweep_id).peak.value == pytest.approx(-20.0)
+
+
+def test_migrate_drops_title_and_operator(tmp_path):
+    path = tmp_path / "old.db"
+    connection = sqlite3.connect(path)
+    connection.execute("""
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            title TEXT,
+            operator TEXT,
+            model TEXT,
+            serial TEXT,
+            firmware TEXT,
+            notes TEXT
+        )
+    """)
+    connection.execute(
+        "INSERT INTO runs (started_at, title, operator) VALUES ('t', 'old', 'me')")
+    connection.commit()
+    connection.close()
+
+    with Storage(path) as db:
+        columns = {row["name"] for row in db.query("PRAGMA table_info(runs)")}
+        assert "title" not in columns
+        assert "operator" not in columns
+        assert db.query("SELECT started_at FROM runs")[0]["started_at"] == "t"

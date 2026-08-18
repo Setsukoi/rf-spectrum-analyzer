@@ -63,8 +63,7 @@ class Lab:
                 self.sa = connect(address.strip())
                 self.fake = False
             self.sa.prepare()
-            self.run_id = self.db.start_run(
-                "网页测量", identity=self.sa.identity)
+            self.run_id = self.db.start_run(identity=self.sa.identity)
             return self._status_unlocked()
 
     def disconnect(self) -> dict[str, Any]:
@@ -100,8 +99,7 @@ class Lab:
         with self._lock:
             sa = self._require()
             if self.run_id is None:
-                self.run_id = self.db.start_run(
-                    "网页测量", identity=sa.identity)
+                self.run_id = self.db.start_run(identity=sa.identity)
             kwargs = {key: fields[key] for key in _CONFIGURE_KEYS
                       if key in fields and fields[key] is not None}
             if kwargs:
@@ -184,8 +182,7 @@ class Lab:
                     except OSError:
                         pass
             if self.sa is not None:
-                self.run_id = self.db.start_run(
-                    "网页测量", identity=self.sa.identity)
+                self.run_id = self.db.start_run(identity=self.sa.identity)
             else:
                 self.run_id = None
             return {"cleared": True, "run_id": self.run_id}

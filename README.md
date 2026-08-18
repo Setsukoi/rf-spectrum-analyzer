@@ -63,7 +63,7 @@ Ensure:
 .venv/bin/python examples/measure.py TCPIP0::192.168.10.2::hislip0::INSTR
 ```
 
-Key parameters: `--center-hz` `--span-hz` `--rbw-hz` `--attenuation-db` `--points` `--operator` `--db`
+Key parameters: `--center-hz` `--span-hz` `--rbw-hz` `--attenuation-db` `--points` `--db`
 
 ## Testing
 

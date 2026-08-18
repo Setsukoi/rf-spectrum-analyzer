@@ -2,7 +2,7 @@
 
 Two tables:
 
-``runs``   one row per test session (who, when, which instrument)
+``runs``   one row per test session (when, which instrument)
 ``sweeps`` one row per captured trace: settings, peak, optional frequency
            counter result, and amplitudes as a BLOB
 """
@@ -29,8 +29,6 @@ CREATE TABLE IF NOT EXISTS runs (
     id          INTEGER PRIMARY KEY,
     started_at  TEXT NOT NULL,
     finished_at TEXT,
-    title       TEXT,
-    operator    TEXT,
     model       TEXT,
     serial      TEXT,
     firmware    TEXT,
@@ -82,11 +80,16 @@ class Storage:
         self.connection.commit()
 
     def _migrate(self) -> None:
-        columns = {row["name"] for row in
-                   self.connection.execute("PRAGMA table_info(sweeps)")}
-        if "screenshot_path" not in columns:
+        sweep_columns = {row["name"] for row in
+                         self.connection.execute("PRAGMA table_info(sweeps)")}
+        if "screenshot_path" not in sweep_columns:
             self.connection.execute(
                 "ALTER TABLE sweeps ADD COLUMN screenshot_path TEXT")
+        run_columns = {row["name"] for row in
+                       self.connection.execute("PRAGMA table_info(runs)")}
+        for obsolete in ("title", "operator"):
+            if obsolete in run_columns:
+                self.connection.execute(f"ALTER TABLE runs DROP COLUMN {obsolete}")
 
     def close(self) -> None:
         self.connection.close()
@@ -97,13 +100,12 @@ class Storage:
     def __exit__(self, *exc_info) -> None:
         self.close()
 
-    def start_run(self, title: str | None = None, *, identity: Identity | None = None,
-                  operator: str | None = None, notes: str | None = None) -> int:
+    def start_run(self, *, identity: Identity | None = None, notes: str | None = None) -> int:
         with self._lock:
             cursor = self.connection.execute(
-                "INSERT INTO runs (started_at, title, operator, model, serial,"
-                " firmware, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (utcnow().isoformat(), title, operator,
+                "INSERT INTO runs (started_at, model, serial, firmware, notes)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (utcnow().isoformat(),
                  identity.model if identity else None,
                  identity.serial if identity else None,
                  identity.firmware if identity else None, notes))
@@ -183,9 +185,8 @@ class Storage:
             "SELECT s.id, s.run_id, s.captured_at, s.label, s.center_hz, s.span_hz,"
             " s.start_hz, s.stop_hz, s.rbw_hz, s.vbw_hz, s.points, s.sweep_time_s,"
             " s.attenuation_db, s.ref_level_dbm, s.detector, s.peak_hz, s.peak_dbm,"
-            " s.counter_hz, s.frequency_error_hz, s.screenshot_path,"
-            " r.title, r.operator"
-            " FROM sweeps s LEFT JOIN runs r ON r.id = s.run_id"
+            " s.counter_hz, s.frequency_error_hz, s.screenshot_path"
+            " FROM sweeps s"
             " ORDER BY s.captured_at DESC, s.id DESC")
 
     def query(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:

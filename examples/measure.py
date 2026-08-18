@@ -18,9 +18,8 @@ def timestamp() -> str:
 
 
 def run_sweep(sa: N9020A, db: Storage, *, center_hz: float, span_hz: float,
-              rbw_hz: float, attenuation_db: float, points: int,
-              operator: str | None) -> int:
-    run = db.start_run("1 GHz tone check", identity=sa.identity, operator=operator)
+              rbw_hz: float, attenuation_db: float, points: int) -> int:
+    run = db.start_run(identity=sa.identity)
     settings = sa.configure(center_hz=center_hz, span_hz=span_hz, rbw_hz=rbw_hz,
                             ref_level_dbm=0, attenuation_db=attenuation_db,
                             points=points, detector="RMS")
@@ -42,8 +41,8 @@ def run_sweep(sa: N9020A, db: Storage, *, center_hz: float, span_hz: float,
 
 def run_frequency_check(sa: N9020A, db: Storage, *, center_hz: float, span_hz: float,
                         rbw_hz: float, attenuation_db: float, points: int,
-                        operator: str | None, screenshot: Path) -> tuple[int, Path]:
-    run = db.start_run("frequency check", identity=sa.identity, operator=operator)
+                        screenshot: Path) -> tuple[int, Path]:
+    run = db.start_run(identity=sa.identity)
     settings = sa.configure(center_hz=center_hz, span_hz=span_hz, rbw_hz=rbw_hz,
                             attenuation_db=attenuation_db, points=points,
                             detector="RMS")
@@ -81,7 +80,6 @@ def main() -> int:
     parser.add_argument("--rbw-hz", type=float, default=30e3)
     parser.add_argument("--attenuation-db", type=float, default=10.0)
     parser.add_argument("--points", type=int, default=1001)
-    parser.add_argument("--operator", default=None)
     parser.add_argument("--screenshot", default=None,
                         help="PNG path for --frequency (default: screenshots/frequency_<time>.png)")
     args = parser.parse_args()
@@ -91,7 +89,7 @@ def main() -> int:
 
     shared = dict(center_hz=args.center_hz, span_hz=args.span_hz,
                   rbw_hz=args.rbw_hz, attenuation_db=args.attenuation_db,
-                  points=args.points, operator=args.operator)
+                  points=args.points)
 
     with open_analyzer(args.address, fake=args.fake) as sa, Storage(args.db) as db:
         print(sa.identity)
