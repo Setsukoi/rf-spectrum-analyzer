@@ -50,11 +50,12 @@ main {
   grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 0.75rem;
   padding: 0.75rem;
-  align-items: stretch;
+  align-items: start;
   min-height: calc(100vh - 3.2rem);
 }
 
-.side {
+.side,
+.right {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -135,10 +136,9 @@ button:disabled {
 }
 
 .records-panel {
-  flex: 1;
-  min-height: 14rem;
   display: flex;
   flex-direction: column;
+  min-height: 12rem;
 }
 
 #records {
@@ -146,6 +146,7 @@ button:disabled {
   overflow: auto;
   margin-top: 0.5rem;
   min-height: 0;
+  max-height: 24rem;
 }
 
 .record {
@@ -175,8 +176,6 @@ button:disabled {
 }
 
 .screen-panel {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
 }
 
@@ -187,25 +186,38 @@ button:disabled {
 }
 
 .screen-frame {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 22rem;
-  background: #111;
-  border: 1px solid #333;
+  background: #fff;
+  border: 1px solid #ccc;
   overflow: hidden;
 }
 
+.screen-frame--empty {
+  height: 4.5rem;
+  background: #fafafa;
+  border: 1px dashed #ccc;
+}
+
+.screen-frame:not(.screen-frame--empty) {
+  background: #fff;
+  border: 1px solid #ccc;
+  max-height: 200px;
+}
+
 .screen-frame .empty {
-  color: #9aa;
-  font-size: 0.9rem;
+  color: #999;
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 0.5rem;
+  text-align: center;
 }
 
 #screen {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 9rem);
+  max-height: 200px;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -268,14 +280,19 @@ button:disabled {
   }
 
   .records-panel {
-    min-height: 16rem;
+    min-height: 14rem;
   }
 
   #records {
     max-height: 20rem;
   }
 
-  .screen-frame {
-    min-height: 16rem;
+  .screen-frame--empty {
+    height: 4rem;
+  }
+
+  #screen,
+  .screen-frame:not(.screen-frame--empty) {
+    max-height: 160px;
   }
 }

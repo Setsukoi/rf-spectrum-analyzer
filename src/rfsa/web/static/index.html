@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>频谱仪 N9020A</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
   <header>
@@ -70,13 +70,24 @@
           <button id="apply" type="button">应用参数</button>
           <button id="scan" class="primary" type="button">扫描</button>
         </div>
-        <label>频率测试套餐
-          <select id="preset"></select>
-        </label>
-        <div class="row">
-          <button id="frequency-check" type="button">频率测试</button>
+        <p class="hint">「应用参数」只写入仪器。「扫描」用当前表单测一次并截图。截图保存在本机 screenshots/。</p>
+      </section>
+    </div>
+
+    <div class="right">
+      <section class="panel screen-panel">
+        <h2>仪器屏幕</h2>
+        <p id="result">尚未扫描</p>
+        <div id="screen-frame" class="screen-frame screen-frame--empty">
+          <p id="screen-empty" class="empty">扫描后这里显示仪器截图</p>
+          <img id="screen" alt="仪器截图" hidden>
         </div>
-        <p class="hint">「应用参数」只写入仪器。「扫描」用当前表单测一次。「频率测试」用所选套餐，不读表单。截图在本机 screenshots/。</p>
+      </section>
+
+      <section class="panel frequency-panel">
+        <h2>单元测试</h2>
+        <button id="frequency-check" type="button">频率测试 (1 GHz)</button>
+        <p class="hint">固定数据，不读取左侧表单。</p>
       </section>
 
       <section class="panel records-panel">
@@ -88,15 +99,6 @@
         <div id="records"></div>
       </section>
     </div>
-
-    <section class="panel screen-panel">
-      <h2>仪器屏幕</h2>
-      <p id="result">尚未扫描</p>
-      <div class="screen-frame">
-        <p id="screen-empty" class="empty">扫描后这里显示仪器截图</p>
-        <img id="screen" alt="仪器截图" hidden>
-      </div>
-    </section>
   </main>
   <div id="busy-mask" hidden>
     <p>扫描中…</p>
@@ -107,6 +109,6 @@
       <button id="popup-ok" type="button">确定</button>
     </div>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ Two tables:
 
 ``runs``   one row per test session (when, which instrument)
 ``sweeps`` one row per captured trace: settings, peak, optional frequency
-           counter result, and amplitudes as a BLOB
+           counter result, and trace x/y coordinates as BLOBs
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import numpy as np
 from .models import Identity, Settings, Sweep, utcnow
 
 _BLOB_DTYPE = np.dtype("<f8")
+_TRACE_BLOBS = ("frequencies", "amplitudes")
 _SETTINGS_COLUMNS = tuple(f.name for f in fields(Settings))
 
 SCHEMA = """
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS sweeps (
     counter_hz         REAL,
     frequency_error_hz REAL,
     screenshot_path    TEXT,
+    frequencies        BLOB    NOT NULL,
     amplitudes         BLOB    NOT NULL
 );
 
@@ -85,11 +87,31 @@ class Storage:
         if "screenshot_path" not in sweep_columns:
             self.connection.execute(
                 "ALTER TABLE sweeps ADD COLUMN screenshot_path TEXT")
+        if "frequencies" not in sweep_columns:
+            self.connection.execute("ALTER TABLE sweeps ADD COLUMN frequencies BLOB")
+            self._backfill_frequencies()
         run_columns = {row["name"] for row in
                        self.connection.execute("PRAGMA table_info(runs)")}
         for obsolete in ("title", "operator"):
             if obsolete in run_columns:
                 self.connection.execute(f"ALTER TABLE runs DROP COLUMN {obsolete}")
+
+    def _backfill_frequencies(self) -> None:
+        """Older databases stored only y values; derive x from the saved settings."""
+        rows = self.connection.execute(
+            "SELECT id, center_hz, span_hz, points, amplitudes FROM sweeps"
+            " WHERE frequencies IS NULL").fetchall()
+        for row in rows:
+            start_hz = row["center_hz"] - row["span_hz"] / 2
+            stop_hz = row["center_hz"] + row["span_hz"] / 2
+            points = len(np.frombuffer(row["amplitudes"], dtype=_BLOB_DTYPE))
+            if row["span_hz"] == 0:
+                axis = np.full(points, row["center_hz"], dtype=float)
+            else:
+                axis = np.linspace(start_hz, stop_hz, points)
+            self.connection.execute(
+                "UPDATE sweeps SET frequencies = ? WHERE id = ?",
+                (np.asarray(axis, dtype=_BLOB_DTYPE).tobytes(), row["id"]))
 
     def close(self) -> None:
         self.connection.close()
@@ -144,15 +166,20 @@ class Storage:
         peak = sweep.peak
         stored_hz = peak.frequency_hz if peak_hz is None else peak_hz
         stored_dbm = peak.value if peak_dbm is None else peak_dbm
+        frequencies = np.asarray(sweep.frequencies_hz, dtype=_BLOB_DTYPE)
+        amplitudes = np.asarray(sweep.amplitudes_dbm, dtype=_BLOB_DTYPE)
+        if len(frequencies) != len(amplitudes):
+            raise ValueError(
+                f"trace has {len(amplitudes)} amplitudes but {len(frequencies)} frequencies")
         columns = ("run_id", "captured_at", "label", "trace", *_SETTINGS_COLUMNS,
                    "start_hz", "stop_hz", "peak_hz", "peak_dbm",
                    "counter_hz", "frequency_error_hz", "screenshot_path",
-                   "amplitudes")
+                   "frequencies", "amplitudes")
         values = (run_id, sweep.captured_at.isoformat(), sweep.label, sweep.trace,
                   *(getattr(s, column) for column in _SETTINGS_COLUMNS),
                   s.start_hz, s.stop_hz, stored_hz, stored_dbm,
                   counter_hz, frequency_error_hz, screenshot_path,
-                  np.asarray(sweep.amplitudes_dbm, dtype=_BLOB_DTYPE).tobytes())
+                  frequencies.tobytes(), amplitudes.tobytes())
         with self._lock:
             cursor = self.connection.execute(
                 f"INSERT INTO sweeps ({', '.join(columns)})"
@@ -165,11 +192,21 @@ class Storage:
         values = {column: row[column] for column in _SETTINGS_COLUMNS}
         values["preamp"] = bool(values["preamp"])
         settings = Settings(**values)
+        frequencies = np.frombuffer(row["frequencies"], dtype=_BLOB_DTYPE).copy()
+        amplitudes = np.frombuffer(row["amplitudes"], dtype=_BLOB_DTYPE).copy()
         return Sweep(
-            amplitudes_dbm=np.frombuffer(row["amplitudes"], dtype=_BLOB_DTYPE).copy(),
+            amplitudes_dbm=amplitudes,
             settings=settings, trace=row["trace"],
             captured_at=datetime.fromisoformat(row["captured_at"]),
-            label=row["label"])
+            label=row["label"],
+            _frequency_axis_hz=frequencies)
+
+    def load_trace(self, sweep_id: int) -> tuple[np.ndarray, np.ndarray]:
+        """Return ``(frequencies_hz, amplitudes_dbm)`` exactly as stored."""
+        row = self.load_sweep_row(sweep_id)
+        frequencies = np.frombuffer(row["frequencies"], dtype=_BLOB_DTYPE).copy()
+        amplitudes = np.frombuffer(row["amplitudes"], dtype=_BLOB_DTYPE).copy()
+        return frequencies, amplitudes
 
     def load_sweep_row(self, sweep_id: int) -> sqlite3.Row:
         with self._lock:

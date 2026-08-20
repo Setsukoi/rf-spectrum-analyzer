@@ -12,10 +12,10 @@ const els = {
   disconnect: $("disconnect"),
   apply: $("apply"),
   scan: $("scan"),
-  preset: $("preset"),
   frequencyCheck: $("frequency-check"),
   clearHistory: $("clear-history"),
   result: $("result"),
+  screenFrame: $("screen-frame"),
   screen: $("screen"),
   screenEmpty: $("screen-empty"),
   records: $("records"),
@@ -195,8 +195,10 @@ function showScreenshot(row) {
     els.screen.removeAttribute("src");
     els.screenEmpty.hidden = false;
     els.screenEmpty.textContent = row ? "无截图" : "扫描后这里显示仪器截图";
+    els.screenFrame.classList.add("screen-frame--empty");
     return;
   }
+  els.screenFrame.classList.remove("screen-frame--empty");
   els.screenEmpty.hidden = true;
   els.screen.hidden = false;
   els.screen.alt = row.screenshot_name || "仪器截图";
@@ -342,19 +344,12 @@ els.scan.addEventListener("click", () => withBusy(async () => {
   }
 }, "扫描中…"));
 
-async function loadPresets() {
-  const items = await api("/api/presets");
-  els.preset.innerHTML = items.map(
-    (item) => `<option value="${item.name}">${item.name}</option>`
-  ).join("");
-}
+const FREQUENCY_PRESET = "1 GHz";
 
 els.frequencyCheck.addEventListener("click", () => withBusy(async () => {
-  const name = els.preset.value;
-  if (!name) throw new Error("没有可用的频率测试套餐");
   const row = await api("/api/frequency-check", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name: FREQUENCY_PRESET }),
   });
   selectedId = row.id;
   fillForm(row.settings);
@@ -372,7 +367,6 @@ els.frequencyCheck.addEventListener("click", () => withBusy(async () => {
 (async function init() {
   try {
     applyStatus(await api("/api/status"));
-    await loadPresets();
     await refreshRecords();
     showScreenshot(null);
   } catch (err) {

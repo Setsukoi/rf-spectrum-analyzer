@@ -215,7 +215,8 @@ def _settings_json(settings: Settings) -> dict[str, Any]:
 
 
 def _row_json(row) -> dict[str, Any]:
-    payload = {key: row[key] for key in row.keys() if key != "amplitudes"}
+    payload = {key: row[key] for key in row.keys()
+               if key not in ("frequencies", "amplitudes")}
     path = payload.get("screenshot_path")
     payload["has_screenshot"] = bool(path)
     if path:

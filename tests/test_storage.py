@@ -34,6 +34,10 @@ class TestSchema:
         columns = {r["name"] for r in db.query("PRAGMA table_info(sweeps)")}
         assert "screenshot_path" in columns
 
+    def test_frequencies_column_exists(self, db):
+        columns = {r["name"] for r in db.query("PRAGMA table_info(sweeps)")}
+        assert "frequencies" in columns
+
     def test_runs_table_has_no_title_or_operator(self, db):
         columns = {r["name"] for r in db.query("PRAGMA table_info(runs)")}
         assert "title" not in columns
@@ -53,7 +57,19 @@ class TestRoundTrip:
         original = make_sweep()
         loaded = db.load_sweep(db.save_sweep(run, original))
         assert np.array_equal(loaded.amplitudes_dbm, original.amplitudes_dbm)
+        assert np.array_equal(loaded.frequencies_hz, original.frequencies_hz)
         assert loaded.settings == original.settings
+
+    def test_trace_coordinates_are_stored_explicitly(self, db):
+        run = db.start_run()
+        sweep = make_sweep(points=501)
+        sweep_id = db.save_sweep(run, sweep)
+        frequencies, amplitudes = db.load_trace(sweep_id)
+        assert len(frequencies) == 501
+        assert len(amplitudes) == 501
+        assert frequencies[0] == pytest.approx(sweep.settings.start_hz)
+        assert frequencies[-1] == pytest.approx(sweep.settings.stop_hz)
+        assert amplitudes[500] == pytest.approx(-20.0)
 
     def test_frequency_counter_columns(self, db):
         run = db.start_run()
@@ -160,3 +176,65 @@ def test_migrate_drops_title_and_operator(tmp_path):
         assert "title" not in columns
         assert "operator" not in columns
         assert db.query("SELECT started_at FROM runs")[0]["started_at"] == "t"
+
+
+def test_migrate_backfills_frequencies_for_old_sweeps(tmp_path):
+    path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    connection.executescript("""
+        CREATE TABLE runs (
+            id INTEGER PRIMARY KEY,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            model TEXT,
+            serial TEXT,
+            firmware TEXT,
+            notes TEXT
+        );
+        CREATE TABLE sweeps (
+            id INTEGER PRIMARY KEY,
+            run_id INTEGER NOT NULL,
+            captured_at TEXT NOT NULL,
+            label TEXT,
+            trace INTEGER NOT NULL DEFAULT 1,
+            center_hz REAL NOT NULL,
+            span_hz REAL NOT NULL,
+            start_hz REAL NOT NULL,
+            stop_hz REAL NOT NULL,
+            rbw_hz REAL NOT NULL,
+            vbw_hz REAL NOT NULL,
+            points INTEGER NOT NULL,
+            sweep_time_s REAL NOT NULL,
+            ref_level_dbm REAL NOT NULL,
+            attenuation_db REAL NOT NULL,
+            preamp INTEGER NOT NULL,
+            detector TEXT NOT NULL,
+            trace_type TEXT NOT NULL,
+            peak_hz REAL,
+            peak_dbm REAL,
+            counter_hz REAL,
+            frequency_error_hz REAL,
+            screenshot_path TEXT,
+            amplitudes BLOB NOT NULL
+        );
+    """)
+    amplitudes = np.array([-90.0, -20.0, -90.0], dtype="<f8").tobytes()
+    connection.execute(
+        "INSERT INTO runs (started_at) VALUES ('2026-01-01T00:00:00+00:00')")
+    connection.execute(
+        "INSERT INTO sweeps (run_id, captured_at, trace, center_hz, span_hz,"
+        " start_hz, stop_hz, rbw_hz, vbw_hz, points, sweep_time_s,"
+        " ref_level_dbm, attenuation_db, preamp, detector, trace_type,"
+        " amplitudes) VALUES (1, '2026-01-01T00:00:00+00:00', 1,"
+        " 1e9, 10e6, 995e6, 1005e6, 30e3, 30e3, 3, 0.01, 0, 10, 0, 'RMS',"
+        " 'WRIT', ?)", (amplitudes,))
+    connection.commit()
+    connection.close()
+
+    with Storage(path) as db:
+        frequencies, amps = db.load_trace(1)
+        assert len(frequencies) == 3
+        assert frequencies[0] == pytest.approx(995e6)
+        assert frequencies[-1] == pytest.approx(1005e6)
+        assert amps[1] == pytest.approx(-20.0)

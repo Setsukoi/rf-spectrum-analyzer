@@ -92,12 +92,15 @@ class Sweep:
     trace: int = 1
     captured_at: datetime = field(default_factory=utcnow)
     label: str | None = None
+    _frequency_axis_hz: np.ndarray | None = field(default=None, repr=False, compare=False)
 
     def __len__(self) -> int:
         return len(self.amplitudes_dbm)
 
     @property
     def frequencies_hz(self) -> np.ndarray:
+        if self._frequency_axis_hz is not None:
+            return self._frequency_axis_hz
         s = self.settings
         if s.span_hz == 0:
             return np.full(len(self), s.center_hz)
