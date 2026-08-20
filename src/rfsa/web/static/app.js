@@ -12,6 +12,8 @@ const els = {
   disconnect: $("disconnect"),
   apply: $("apply"),
   scan: $("scan"),
+  preset: $("preset"),
+  frequencyCheck: $("frequency-check"),
   clearHistory: $("clear-history"),
   result: $("result"),
   screen: $("screen"),
@@ -159,7 +161,8 @@ function formPayload() {
 
 function setBusy(on, scanLabel) {
   busy = on;
-  for (const button of [els.connect, els.fake, els.disconnect, els.apply, els.scan, els.clearHistory]) {
+  for (const button of [els.connect, els.fake, els.disconnect, els.apply,
+                        els.scan, els.frequencyCheck, els.clearHistory]) {
     button.disabled = on;
   }
   els.scan.textContent = on && scanLabel ? scanLabel : "扫描";
@@ -339,9 +342,37 @@ els.scan.addEventListener("click", () => withBusy(async () => {
   }
 }, "扫描中…"));
 
+async function loadPresets() {
+  const items = await api("/api/presets");
+  els.preset.innerHTML = items.map(
+    (item) => `<option value="${item.name}">${item.name}</option>`
+  ).join("");
+}
+
+els.frequencyCheck.addEventListener("click", () => withBusy(async () => {
+  const name = els.preset.value;
+  if (!name) throw new Error("没有可用的频率测试套餐");
+  const row = await api("/api/frequency-check", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  selectedId = row.id;
+  fillForm(row.settings);
+  showResult(row);
+  await refreshRecords();
+  if (row.counter_error) {
+    showBanner(`已保存扫描 #${row.id}（频率计无数）`);
+  } else if (!row.has_screenshot) {
+    showBanner(`已保存扫描 #${row.id}（无截图）`);
+  } else {
+    showBanner(`已保存扫描 #${row.id}`, true);
+  }
+}, "频率测试中…"));
+
 (async function init() {
   try {
     applyStatus(await api("/api/status"));
+    await loadPresets();
     await refreshRecords();
     showScreenshot(null);
   } catch (err) {

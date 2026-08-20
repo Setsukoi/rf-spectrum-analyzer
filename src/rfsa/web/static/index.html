@@ -70,7 +70,13 @@
           <button id="apply" type="button">应用参数</button>
           <button id="scan" class="primary" type="button">扫描</button>
         </div>
-        <p class="hint">「应用参数」只写入仪器。「扫描」会再自动应用当前表单，然后测频、截图并入库。截图在本机 screenshots/。</p>
+        <label>频率测试套餐
+          <select id="preset"></select>
+        </label>
+        <div class="row">
+          <button id="frequency-check" type="button">频率测试</button>
+        </div>
+        <p class="hint">「应用参数」只写入仪器。「扫描」用当前表单测一次。「频率测试」用所选套餐，不读表单。截图在本机 screenshots/。</p>
       </section>
 
       <section class="panel records-panel">

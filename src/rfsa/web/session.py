@@ -107,8 +107,6 @@ class Lab:
             try:
                 sweep = sa.capture()
                 peak = sa.peak_search()
-                # A silent tone gives the counter nothing to count. That is worth
-                # recording as "unknown", not worth throwing the sweep away over.
                 counter_hz = None
                 error_hz = None
                 counter_error = None

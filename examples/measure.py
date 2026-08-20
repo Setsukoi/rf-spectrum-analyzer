@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from rfsa import N9020A, Storage, connect
+from rfsa.checks import run_frequency_check
+from rfsa.presets import preset
 
 def open_analyzer(address: str, *, fake: bool) -> N9020A:
     if fake:
@@ -39,31 +42,6 @@ def run_sweep(sa: N9020A, db: Storage, *, center_hz: float, span_hz: float,
     return sweep_id
 
 
-def run_frequency_check(sa: N9020A, db: Storage, *, center_hz: float, span_hz: float,
-                        rbw_hz: float, attenuation_db: float, points: int,
-                        screenshot: Path) -> tuple[int, Path]:
-    run = db.start_run(identity=sa.identity)
-    settings = sa.configure(center_hz=center_hz, span_hz=span_hz, rbw_hz=rbw_hz,
-                            attenuation_db=attenuation_db, points=points,
-                            detector="RMS")
-    sweep = sa.capture(label=f"{center_hz / 1e6:.3f} MHz frequency check")
-
-    peak = sa.peak_search()
-    frequency = sa.marker_frequency_counter()
-    error_hz = frequency.value - center_hz
-
-    image = sa.save_screen_image(screenshot)
-    sweep_id = db.save_sweep(run, sweep, counter_hz=frequency.value,
-                             frequency_error_hz=error_hz)
-    db.finish_run(run)
-
-    print(f"center: {settings.center_hz:.3f} Hz, span: {settings.span_hz:.3f} Hz")
-    print(f"peak marker: {peak.value:.2f} dBm @ {peak.frequency_hz:.3f} Hz")
-    print(f"counter: {frequency.value:.3f} Hz")
-    print(f"error: {error_hz:+.3f} Hz")
-    return sweep_id, image
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -95,7 +73,16 @@ def main() -> int:
         print(sa.identity)
         if args.frequency:
             screenshot = Path(args.screenshot or f"screenshots/frequency_{timestamp()}.png")
-            sweep_id, image = run_frequency_check(sa, db, screenshot=screenshot, **shared)
+            chosen = replace(preset("1 GHz"), **shared)
+            sweep_id, image = run_frequency_check(sa, db, chosen, screenshot)
+            row = db.load_sweep_row(sweep_id)
+            print(f"center: {row['center_hz']:.3f} Hz, span: {row['span_hz']:.3f} Hz")
+            print(f"peak marker: {row['peak_dbm']:.2f} dBm @ {row['peak_hz']:.3f} Hz")
+            if row["counter_hz"] is None:
+                print("counter: no countable signal")
+            else:
+                print(f"counter: {row['counter_hz']:.3f} Hz")
+                print(f"error: {row['frequency_error_hz']:+.3f} Hz")
             print(f"sweep #{sweep_id} saved to {args.db}")
             print(f"screenshot saved to {image}")
         else:

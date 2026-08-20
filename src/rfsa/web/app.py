@@ -17,6 +17,7 @@ from rfsa.errors import ConnectionFailed, ParameterError, RfsaError, ScpiError
 from rfsa.limits import Limits
 from rfsa.models import DETECTORS
 from rfsa.web.session import Lab, NotConnected
+from rfsa.presets import FREQUENCY_PRESETS, preset as lookup_preset
 
 STATIC = Path(__file__).parent / "static"
 
@@ -41,6 +42,10 @@ class ConfigureBody(BaseModel):
 
 class ScanBody(ConfigureBody):
     label: str | None = Field(default=None)
+
+
+class FrequencyCheckBody(BaseModel):
+    name: str = "1 GHz"
 
 
 def create_app(db_path: str = "measurements.db", *,
@@ -116,6 +121,22 @@ def create_app(db_path: str = "measurements.db", *,
     @app.post("/api/configure")
     def configure(body: ConfigureBody) -> dict[str, Any]:
         return lab().configure(body.model_dump())
+
+    @app.get("/api/presets")
+    def presets() -> list[dict[str, Any]]:
+        return [{"name": item.name, **item.configure_kwargs}
+                for item in FREQUENCY_PRESETS]
+
+    @app.post("/api/frequency-check")
+    def frequency_check(body: FrequencyCheckBody) -> dict[str, Any]:
+        try:
+            chosen = lookup_preset(body.name)
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return lab().scan(
+            label=f"{chosen.name} frequency check",
+            fields=chosen.configure_kwargs,
+        )
 
     @app.post("/api/scan")
     def scan(body: ScanBody = ScanBody()) -> dict[str, Any]:

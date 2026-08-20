@@ -19,6 +19,7 @@ def test_page_is_served(tmp_path):
         assert response.status_code == 200
         assert "扫描" in response.text
         assert "应用参数" in response.text
+        assert "频率测试" in response.text
 
 
 def test_scan_without_connection_is_rejected(tmp_path):
@@ -180,3 +181,27 @@ def test_clear_history_empties_listing_and_files(tmp_path):
         assert cleared.status_code == 200
         assert client.get("/api/sweeps").json() == []
         assert not shot.is_file()
+
+
+def test_presets_and_frequency_check(tmp_path):
+    with TestClient(make_app(tmp_path)) as client:
+        listing = client.get("/api/presets")
+        assert listing.status_code == 200
+        names = [item["name"] for item in listing.json()]
+        assert "1 GHz" in names
+
+        disconnected = client.post("/api/frequency-check", json={"name": "1 GHz"})
+        assert disconnected.status_code == 409
+
+        client.post("/api/connect", json={"fake": True})
+        unknown = client.post("/api/frequency-check", json={"name": "nope"})
+        assert unknown.status_code == 400
+
+        checked = client.post("/api/frequency-check", json={"name": "1 GHz"})
+        assert checked.status_code == 200
+        body = checked.json()
+        assert body["label"] == "1 GHz frequency check"
+        assert body["center_hz"] == 1e9
+        assert body["span_hz"] == 10e6
+        assert body["applied"] is True
+        assert body["has_screenshot"] is True
