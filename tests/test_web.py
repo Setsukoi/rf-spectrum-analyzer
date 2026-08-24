@@ -68,6 +68,7 @@ def test_fake_configure_scan_and_history(tmp_path):
         assert body["has_screenshot"] is True
         shot = Path(body["screenshot_path"])
         assert shot.is_file()
+        assert len(shot.read_bytes()) > 500
         assert shot.read_bytes().startswith(b"\x89PNG")
 
         listing = client.get("/api/sweeps")
@@ -155,6 +156,7 @@ def test_scan_saves_when_the_frequency_counter_has_nothing_to_count(tmp_path):
     with TestClient(make_app(tmp_path)) as client:
         client.post("/api/connect", json={"fake": True})
         lab = client.app.state.lab
+        lab.sa.fcount_settle_s = 0
         lab.sa._res.responses[":CALCulate:MARKer1:FCOunt:X?"] = "9.91e37"
 
         scanned = client.post("/api/scan", json={"center_hz": 1e9, "span_hz": 10e6})

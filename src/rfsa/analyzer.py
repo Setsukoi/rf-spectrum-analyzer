@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,7 +19,12 @@ _SCREENSHOT_REMOTE = r"D:\rfsa_screen.png"
 _MAX_ERROR_DRAIN = 20
 
 _ON = ("1", "ON", "TRUE")
-_FCOUNT_PRECISIONS = {"FINE": "FINe", "MEDIUM": "MEDium", "COARSE": "COARse"}
+
+# The counter needs a gate time to finish before it has a number to report,
+# and answers 9.91e37 until then. Only markers 1-4 accept :FCOunt:RESolution.
+_FCOUNT_ATTEMPTS = 4
+_FCOUNT_SETTLE_S = 0.25
+_FCOUNT_RESOLUTION_MARKERS = 4
 
 _SETTINGS_QUERIES = (
     ("center_hz",      ":SENSe:FREQuency:CENTer?",              float),
@@ -85,6 +91,8 @@ class N9020A:
             raise InstrumentError(
                 f"expected an N9020A, found {self.identity.model!r}")
         self.limits = limits or Limits()
+        self.fcount_attempts = _FCOUNT_ATTEMPTS
+        self.fcount_settle_s = _FCOUNT_SETTLE_S
         self._data_format = self._read_data_format()
         self._byte_order = self._read_byte_order()
         if prepare:
@@ -425,26 +433,33 @@ class N9020A:
                                f"marker {marker} amplitude")
         return Reading.at_frequency(requested_hz, y, frequency_hz=x)
 
-    def marker_frequency_counter(self, marker: int = 1, *,
-                                 precision: str = "FINE") -> Reading:
+    def marker_frequency_counter(self, marker: int = 1) -> Reading:
+        """Read the marker frequency counter, waiting out its gate time.
+
+        Asking once right after switching the counter on always fails: the
+        first answer arrives before the gate closes, so retry a few times
+        before believing that there is nothing to count.
+        """
         marker = self._check_marker(marker)
-        precision_key = str(precision).upper()
-        if precision_key not in _FCOUNT_PRECISIONS:
-            raise ParameterError(
-                f"frequency counter precision must be one of {tuple(_FCOUNT_PRECISIONS)}, "
-                f"got {precision!r}")
         self.write_bool(f":CALCulate:MARKer{marker}:STATe", True)
         self.write_bool(f":CALCulate:MARKer{marker}:FCOunt:STATe", True)
-        self.write(f":CALCulate:MARKer{marker}:FCOunt:PRECision "
-                   f"{_FCOUNT_PRECISIONS[precision_key]}")
-        frequency_hz = self._require_data(
-            float(self.query(f":CALCulate:MARKer{marker}:FCOunt:X?")),
-            f"marker {marker} frequency counter (no countable signal?)")
-        return Reading("frequency counter", frequency_hz, "Hz", frequency_hz)
+        if marker <= _FCOUNT_RESOLUTION_MARKERS:
+            self.write_bool(f":CALCulate:MARKer{marker}:FCOunt:RESolution:AUTO", True)
+        self.opc()
+        attempts = max(1, int(self.fcount_attempts))
+        for remaining in range(attempts, 0, -1):
+            frequency_hz = self.query_float(f":CALCulate:MARKer{marker}:FCOunt:X?")
+            if not is_invalid_scpi_value(frequency_hz):
+                return Reading("frequency counter", frequency_hz, "Hz", frequency_hz)
+            if remaining > 1 and self.fcount_settle_s > 0:
+                time.sleep(self.fcount_settle_s)
+        raise InstrumentError(
+            f"marker {marker} frequency counter still answered 9.91e37 after "
+            f"{attempts} tries — no countable signal?")
 
-    def peak_frequency(self, marker: int = 1, *, precision: str = "FINE") -> Reading:
+    def peak_frequency(self, marker: int = 1) -> Reading:
         self.peak_search(marker)
-        return self.marker_frequency_counter(marker, precision=precision)
+        return self.marker_frequency_counter(marker)
 
     def save_screen_image(self, path: str | Path) -> Path:
         output = Path(path)

@@ -56,8 +56,8 @@ class Lab:
         with self._lock:
             self._close_unlocked()
             if fake:
-                from rfsa.fake import FakeResource, tone_trace
-                self.sa = N9020A(FakeResource(trace=tone_trace(peak_dbm=-20.4)))
+                from rfsa.fake import fake_resource
+                self.sa = N9020A(fake_resource())
                 self.fake = True
             else:
                 self.sa = connect(address.strip())

@@ -204,7 +204,7 @@ class TestMarkers:
     def test_peak_search(self, analyzer, resource):
         reading = analyzer.peak_search()
         assert ":CALCulate:MARKer1:MAXimum" in resource.writes
-        assert reading.frequency_hz == pytest.approx(1e9)
+        assert reading.frequency_hz == pytest.approx(analyzer.center_hz)
         assert reading.value == pytest.approx(-20.5)
 
     def test_marker_at_a_frequency(self, analyzer, resource):
@@ -220,16 +220,38 @@ class TestMarkers:
             analyzer.marker_at(2e9)
 
     def test_marker_frequency_counter(self, analyzer, resource):
-        reading = analyzer.marker_frequency_counter(precision="fine")
+        reading = analyzer.marker_frequency_counter()
         assert ":CALCulate:MARKer1:FCOunt:STATe 1" in resource.writes
-        assert reading.value == pytest.approx(1000000123.456)
+        assert reading.value == pytest.approx(analyzer.center_hz + 123.456)
         assert reading.unit == "Hz"
+
+    def test_counter_only_sends_commands_the_n9020a_defines(self, analyzer, resource):
+        analyzer.marker_frequency_counter()
+        assert ":CALCulate:MARKer1:FCOunt:RESolution:AUTO 1" in resource.writes
+        assert not [c for c in resource.writes if "PRECision" in c]
+
+    def test_counter_retries_until_the_gate_time_closes(self, analyzer, resource):
+        analyzer.fcount_settle_s = 0
+        answers = ["9.91e37", "9.91e37", "1000000123.456"]
+        resource.responses[":CALCulate:MARKer1:FCOunt:X?"] = answers[0]
+
+        real_query = resource.query
+
+        def query(command):
+            if command == ":CALCulate:MARKer1:FCOunt:X?" and answers:
+                resource.responses[command] = answers.pop(0)
+            return real_query(command)
+
+        resource.query = query
+        reading = analyzer.marker_frequency_counter()
+        assert reading.value == pytest.approx(1000000123.456)
 
     def test_keysight_nodata_sentinel_is_detected(self):
         assert is_invalid_scpi_value(9.91e37)
         assert not is_invalid_scpi_value(1e9)
 
     def test_an_uncountable_signal_is_refused_not_returned(self, analyzer, resource):
+        analyzer.fcount_settle_s = 0
         resource.responses[":CALCulate:MARKer1:FCOunt:X?"] = "9.91e37"
         with pytest.raises(InstrumentError, match="9.91e37"):
             analyzer.marker_frequency_counter()

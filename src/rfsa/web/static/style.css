@@ -2,6 +2,10 @@
   font-family: system-ui, sans-serif;
   color: #1a1a1a;
   background: #ececec;
+
+  /* Screenshot area size. Change these two and nothing else. */
+  --screen-height: 400px;        /* the instrument screenshot itself */
+  --screen-empty-height: 4.5rem; /* the dashed placeholder before any scan */
 }
 
 * { box-sizing: border-box; }
@@ -195,7 +199,7 @@ button:disabled {
 }
 
 .screen-frame--empty {
-  height: 4.5rem;
+  height: var(--screen-empty-height);
   background: #fafafa;
   border: 1px dashed #ccc;
 }
@@ -203,7 +207,7 @@ button:disabled {
 .screen-frame:not(.screen-frame--empty) {
   background: #fff;
   border: 1px solid #ccc;
-  max-height: 200px;
+  max-height: var(--screen-height);
 }
 
 .screen-frame .empty {
@@ -217,7 +221,7 @@ button:disabled {
 #screen {
   display: block;
   max-width: 100%;
-  max-height: 200px;
+  max-height: var(--screen-height);
   width: auto;
   height: auto;
   object-fit: contain;
@@ -274,6 +278,11 @@ button:disabled {
 }
 
 @media (max-width: 900px) {
+  :root {
+    --screen-height: 160px;
+    --screen-empty-height: 4rem;
+  }
+
   main {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -285,14 +294,5 @@ button:disabled {
 
   #records {
     max-height: 20rem;
-  }
-
-  .screen-frame--empty {
-    height: 4rem;
-  }
-
-  #screen,
-  .screen-frame:not(.screen-frame--empty) {
-    max-height: 160px;
   }
 }

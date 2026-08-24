@@ -11,9 +11,9 @@ from rfsa.presets import preset
 
 def open_analyzer(address: str, *, fake: bool) -> N9020A:
     if fake:
-        from rfsa.fake import FakeResource, tone_trace
-        print("[fake] no instrument — amplitudes below are invented\n")
-        return N9020A(FakeResource(trace=tone_trace(peak_dbm=-20.4)))
+        from rfsa.fake import fake_resource
+        print("[fake] no instrument — using synthetic 1 GHz lab trace\n")
+        return N9020A(fake_resource())
     return connect(address)
 
 def timestamp() -> str:
