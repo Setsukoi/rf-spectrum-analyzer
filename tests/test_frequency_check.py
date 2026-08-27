@@ -22,11 +22,15 @@ def test_frequency_check_on_fake_analyzer(tmp_path):
 
         assert ":SENSe:FREQuency:CENTer 1000000000.000" in resource.writes
         assert ":SENSe:FREQuency:SPAN 10000000.000" in resource.writes
-        assert ":INITiate:CONTinuous 0" in resource.writes
         assert ":INITiate:IMMediate" in resource.writes
         assert ":CALCulate:MARKer1:MAXimum" in resource.writes
         assert ":CALCulate:MARKer1:FCOunt:STATe 1" in resource.writes
-        assert any(cmd.startswith(":MMEM:STOR:SCR") for cmd in resource.writes)
+        assert ":INITiate:CONTinuous 0" in resource.writes
+        fcount = resource.writes.index(":CALCulate:MARKer1:FCOunt:STATe 1")
+        hold = resource.writes.index(":INITiate:CONTinuous 0")
+        store = next(i for i, cmd in enumerate(resource.writes)
+                     if cmd.startswith(":MMEM:STOR:SCR"))
+        assert fcount < hold < store
         assert resource.writes[-1] == ":INITiate:CONTinuous 1"
 
         assert image == shot

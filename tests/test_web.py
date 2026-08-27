@@ -142,11 +142,13 @@ def test_scan_resumes_continuous_sweep_after_screenshot(tmp_path):
         lab.sa = N9020A(resource)
         lab.fake = True
         lab.scan()
+        fcount = resource.writes.index(":CALCulate:MARKer1:FCOunt:STATe 1")
         off = resource.writes.index(":INITiate:CONTinuous 0")
         store = next(i for i, cmd in enumerate(resource.writes)
                      if cmd.startswith(":MMEM:STOR:SCR"))
-        on = resource.writes.index(":INITiate:CONTinuous 1")
-        assert off < store < on
+        resume = max(i for i, cmd in enumerate(resource.writes)
+                     if cmd == ":INITiate:CONTinuous 1")
+        assert fcount < off < store < resume
     finally:
         lab.close()
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from rfsa import N9020A, Storage, connect
+from rfsa.checks import read_then_hold
 from rfsa.errors import RfsaError
 from rfsa.models import Identity, Settings, Sweep
 
@@ -105,16 +106,8 @@ class Lab:
             if kwargs:
                 sa.configure(**kwargs)
             try:
-                sweep = sa.capture()
-                peak = sa.peak_search()
-                counter_hz = None
-                error_hz = None
-                counter_error = None
-                try:
-                    counter_hz = sa.marker_frequency_counter().value
-                    error_hz = counter_hz - sweep.settings.center_hz
-                except RfsaError as exc:
-                    counter_error = str(exc)
+                sweep, peak, counter_hz, error_hz, counter_error = read_then_hold(
+                    sa, label=label or None)
                 sweep = Sweep(
                     amplitudes_dbm=sweep.amplitudes_dbm,
                     settings=sweep.settings,

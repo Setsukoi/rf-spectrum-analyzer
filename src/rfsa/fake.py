@@ -28,6 +28,7 @@ DEFAULTS = {
     ":SENSe:POWer:RF:GAIN:STATe?": "0",
     ":SENSe:DETector:TRACe1?": "NORM",
     ":TRACe1:TYPE?": "WRIT",
+    ":INITiate:CONTinuous?": "1",
 }
 
 
@@ -156,6 +157,7 @@ class FakeResource:
         self.read_termination = "\n"
         self.write_termination = "\n"
         self.closed = False
+        self.continuous = True
         if not self._manual_trace:
             self._place_marker_on_peak()
         else:
@@ -230,6 +232,8 @@ class FakeResource:
             if value in ("1", "ON", "TRUE") and self.settings.marker_hz is not None:
                 self.settings.counter_hz = self.settings.marker_hz + _FCOUNT_OFFSET_HZ
             return
+        elif head == ":INITiate:CONTinuous":
+            self.continuous = value in ("1", "ON", "TRUE")
 
         if head.endswith("?"):
             self.responses[head] = value
@@ -320,6 +324,7 @@ class FakeResource:
             ":SENSe:POWer:RF:GAIN:STATe?": "1" if s.preamp else "0",
             ":SENSe:DETector:TRACe1?": s.detector,
             ":TRACe1:TYPE?": s.trace_type,
+            ":INITiate:CONTinuous?": "1" if self.continuous else "0",
         })
         if s.marker_hz is not None:
             self.responses[":CALCulate:MARKer1:X?"] = f"{s.marker_hz:.3f}"

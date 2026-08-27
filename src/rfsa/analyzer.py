@@ -378,9 +378,29 @@ class N9020A:
         self.opc(timeout_s=timeout_s)
         self.check_errors(":INITiate:IMMediate")
 
+    def wait_sweep(self, timeout_s: float | None = None) -> None:
+        """Finish one sweep without leaving the analyzer held.
+
+        Use this when the frequency counter still needs to run: it only
+        produces a number while the sweep is live.
+        """
+        if timeout_s is None:
+            timeout_s = max(10.0, self.sweep_time_s + 5.0)
+        self.write(":INITiate:IMMediate")
+        self.opc(timeout_s=timeout_s)
+        self.check_errors(":INITiate:IMMediate")
+
+    def hold(self) -> None:
+        """Freeze the display so a screenshot matches the numbers just read."""
+        self.write_bool(":INITiate:CONTinuous", False)
+
     def continuous_sweep(self) -> None:
         """Free-run again so the front panel does not stay frozen."""
         self.write_bool(":INITiate:CONTinuous", True)
+
+    @property
+    def continuous(self) -> bool:
+        return _yes_no(self.query(":INITiate:CONTinuous?"))
 
     def settings(self) -> Settings:
         parsed = {}
@@ -436,16 +456,20 @@ class N9020A:
     def marker_frequency_counter(self, marker: int = 1) -> Reading:
         """Read the marker frequency counter, waiting out its gate time.
 
-        Asking once right after switching the counter on always fails: the
-        first answer arrives before the gate closes, so retry a few times
-        before believing that there is nothing to count.
+        The counter only produces a number *during* a sweep. After
+        :meth:`capture` the analyzer is held, so Cnt1 shows ``---`` until we
+        let it sweep again. Asking once right after switching the counter on
+        also fails: the first answer arrives before the gate closes.
         """
         marker = self._check_marker(marker)
         self.write_bool(f":CALCulate:MARKer{marker}:STATe", True)
         self.write_bool(f":CALCulate:MARKer{marker}:FCOunt:STATe", True)
         if marker <= _FCOUNT_RESOLUTION_MARKERS:
             self.write_bool(f":CALCulate:MARKer{marker}:FCOunt:RESolution:AUTO", True)
-        self.opc()
+        if not self.continuous:
+            self.single_sweep()
+        else:
+            self.opc()
         attempts = max(1, int(self.fcount_attempts))
         for remaining in range(attempts, 0, -1):
             frequency_hz = self.query_float(f":CALCulate:MARKer{marker}:FCOunt:X?")

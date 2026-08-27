@@ -1,6 +1,6 @@
 # What this project is
 
-*rfsa* is a python program that talks to the lab spectrum analyzer **Keysight MXA N9020A** through LAN connection. It aims to change basic settings, take sweeps, read frequencies, save screenshots, and finally store all the data in a SQLite file *(measurements.db)*
+*rfsa* is a python program that talks to the lab spectrum analyzer **Keysight MXA N9020A** through LAN connection. It aims to change basic settings, take sweeps, read frequencies, save screenshots, and finally store all the data in a SQLite file *(measurements.db)* through the web.
 
 It uses a repeatable script to replace clicking the front panel on the instrument and realize an automated process.
 
@@ -20,6 +20,7 @@ There are three layers:
 | storage | SQLite: one run (who / when / which box) and many sweeps (trace + settings + peak) |
 | limits | Hardware limits |
 | errors | Common types of errors defined in advance ｜
+| web | Local webpage: connect, set parameters, scan, screenshot, history |
 
 # Measurement flow
 
@@ -29,6 +30,11 @@ connect (HisLIP)
     → capture()       # one sweep, then read trace 1
     → peak_search()   # marker on the highest point (power in dBm)
     → frequency counter   # finer Hz around that marker
+    → configure()          # center, span, RBW, atten, points — no sweep
+    → peak_search()        # marker on the highest point (power in dBm)
+    → frequency counter    # Cnt1: must finish a sweep after the counter is on
+    → read the trace
+    → hold + screenshot    # freeze the screen only after the numbers are in
     → save to measurements.db
     → screenshot
 close
@@ -51,20 +57,6 @@ Ensure:
 1. Analyzer and PC on the same link (this lab: PC 192.168.10.100, instrument 192.168.10.2).
 2. On the analyzer, LAN services On (VXI-11 / Sockets / HisLIP).
 
-
-## Commands
-
-```bash
-# Fake resource
-.venv/bin/python examples/measure.py --fake
-.venv/bin/python examples/measure.py --fake --frequency
-
-# True instrument
-.venv/bin/python examples/measure.py TCPIP0::192.168.10.2::hislip0::INSTR
-```
-
-Key parameters: `--center-hz` `--span-hz` `--rbw-hz` `--attenuation-db` `--points` `--db`
-
 ## Testing
 
 ```bash
@@ -73,3 +65,10 @@ Key parameters: `--center-hz` `--span-hz` `--rbw-hz` `--attenuation-db` `--point
 .venv/bin/python -m pytest --visa=TCPIP0::192.168.10.2::hislip0::INSTR
 ```
 
+## Commands
+
+```bash
+.venv/bin/rfsa-web
+```
+
+Then open **http://127.0.0.1:8000** on this PC. From another machine on the lab LAN (this PC is 192.168.10.100) use **http://192.168.10.100:8000**. The server listens on all interfaces by default (`0.0.0.0`).

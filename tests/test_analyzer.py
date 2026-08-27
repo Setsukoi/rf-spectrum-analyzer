@@ -140,6 +140,18 @@ class TestSweep:
         assert resource.writes == [":INITiate:CONTinuous 0", ":INITiate:IMMediate"]
         assert "*OPC?" in resource.queries
 
+    def test_wait_sweep_does_not_hold_the_analyzer(self, analyzer, resource):
+        resource.writes.clear()
+        analyzer.wait_sweep()
+        assert resource.writes == [":INITiate:IMMediate"]
+        assert ":INITiate:CONTinuous 0" not in resource.writes
+
+    def test_hold_freezes_without_starting_a_new_sweep(self, analyzer, resource):
+        resource.writes.clear()
+        analyzer.hold()
+        assert resource.writes == [":INITiate:CONTinuous 0"]
+        assert ":INITiate:IMMediate" not in resource.writes
+
     def test_continuous_sweep_turns_free_run_back_on(self, analyzer, resource):
         resource.writes.clear()
         analyzer.continuous_sweep()
@@ -266,6 +278,17 @@ class TestMarkers:
         peak = resource.writes.index(":CALCulate:MARKer1:MAXimum")
         counter = resource.writes.index(":CALCulate:MARKer1:FCOunt:STATe 1")
         assert peak < counter
+
+    def test_counter_sweeps_again_when_the_analyzer_is_held(self, analyzer, resource):
+        analyzer.single_sweep()
+        resource.writes.clear()
+        analyzer.marker_frequency_counter()
+        assert ":INITiate:IMMediate" in resource.writes
+
+    def test_counter_does_not_start_a_sweep_while_free_running(self, analyzer, resource):
+        resource.writes.clear()
+        analyzer.marker_frequency_counter()
+        assert ":INITiate:IMMediate" not in resource.writes
 
 
 class TestScreenCapture:
